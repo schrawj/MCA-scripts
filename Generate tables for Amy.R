@@ -23,27 +23,24 @@
 #'-------------------------------------------------------------------------
 #'-------------------------------------------------------------------------
 
-
-
-# Prep environment --------------------------------------------------------
-
 setwd('Z:/Jeremy/GOBACK/Datasets/')
-load('./goback.nochrom.v20180419.rdata')
 
-
-
-# N and % of children by number of defects --------------------------------
+# N and % of children by number of defects: non-chrom ---------------------
 
 require(dplyr); require(tictoc)
 
+load('./goback.nochrom.v20180419.rdata')
+
 #' Overall in non-chromosomal set.
 tic()
-tab <- as.numeric(table(goback.nochrom$defect.total))
-n <- as.numeric(nrow(goback.nochrom))
-num <- sort(as.numeric(unique(goback.nochrom$defect.total)))
-toc()
 
-defect.total.overall <- data.frame(n.defects = num, n.obs.overall = tab, prop.obs.overall = tab/n)
+  tab <- as.numeric(table(goback.nochrom$defect.total))
+  n <- as.numeric(nrow(goback.nochrom))
+  num <- sort(as.numeric(unique(goback.nochrom$defect.total)))
+  
+  defect.total.overall <- data.frame(n.defects = num, n.obs.overall = tab, prop.obs.overall = tab/n)
+
+toc()
 
 #' Stratified by cancer status in non-chromosomal set.
 tab <- table(goback.nochrom$cancer, goback.nochrom$defect.total, useNA = 'ifany')
@@ -206,3 +203,74 @@ count.data <- count.data[2:3601, ]
 count.data <- count.data[count.data$index.defect != count.data$comorbid.defect, ]
 
 write.csv(count.data, file = 'Z:/Jeremy/Multiple anomalies project/conditional.defect.frequencies.csv', row.names = FALSE)
+
+
+# Concatenate organ system indicator variables ----------------------------
+
+require(dplyr)
+
+#' This one I'll do in the full dataset, including kids w/chromosomal anomalies.
+load('./goback.v20180419.rdata')
+
+goback <- goback[ ,c(1,22,30,35,38,61,65,68,76,83,94,95,102, # study id + organ system bd indicator variables
+                     103:147,                                # cancer variables
+                     148)]                                   # repeatable random sampling variable  
+
+#' Set NA values to 0.
+for (i in 2:13){
+  goback[ ,i] <- ifelse(is.na(goback[ ,i]), 0, goback[ ,i])
+}
+
+goback$bd.cat <- with(goback, paste0(  conganomalies.cns,               conganomalies.eye,             conganomalies.ear.face.neck,     conganomalies.heart.circsys,    
+                                       conganomalies.respsys,           oral.clefts,                     conganomalies.digestivesystem,   conganomalies.genitalandurinary,
+                                       conganomalies.musculoskelsys,    conganomalies.integument,        chromosomalanomalies,            other.unspeccongenitalanomalies))
+
+combos <- c(unique(goback$bd.cat))
+
+defect.counts <- data.frame(defect.pattern = as.character(NA),
+                           n.obs = as.numeric(NA),
+                           n.obs.nocan = as.numeric(NA),
+                           n.obs.can = as.numeric(NA))
+
+for (i in 1:length(combos)){
+  
+  tmp <- filter(goback, bd.cat == combos[i])
+  
+  tab <- table(tmp$bd.cat, tmp$cancer)
+  n.cols <- length(dimnames(tab)[[2]])
+  col.one <- dimnames(tab)[[2]][[1]]
+  col.two <- dimnames(tab)[[2]][2]
+  
+  if (n.cols == 2){
+    n.obs.nocan <- tab[1,1]
+    n.obs.can <- tab[1,2]
+  }
+  
+  else if (n.cols == 1 & col.one == 0){
+    n.obs.nocan <- nrow(tmp)
+    n.obs.can <- 0
+  }
+  
+  else{
+    n.obs.nocan <- 0
+    n.obs.can <- nrow(tmp)
+  }
+  
+  new.count <- data.frame(defect.pattern = combos[i],
+                          n.obs = nrow(tmp),
+                          n.obs.nocan = n.obs.nocan,
+                          n.obs.can = n.obs.can)
+  
+  defect.counts <- rbind(defect.counts, new.count)
+  
+  rm(n.obs.can, n.obs.nocan, tab, tmp, new.count)
+  
+}
+
+defect.counts <- defect.counts[2:2662, ]
+defect.counts <- arrange(defect.counts, desc(n.obs))
+
+xlsx::write.xlsx(defect.counts, file = 'Z:/Jeremy/Multiple anomalies project/bd.cat.distribution.xlsx', row.names = FALSE)
+
+rm(list = ls()); gc()
+
